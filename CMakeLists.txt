@@ -11,6 +11,8 @@ add_subdirectory(libs/geGL)
 
 add_custom_target(run ./${PROJECT_NAME})
 
-add_executable(${PROJECT_NAME} src/main.cpp)
+add_executable(${PROJECT_NAME} src/main.cpp src/timer.hpp)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2 SDL2::SDL2main geGL::geGL)
+
+target_include_directories(${PROJECT_NAME} PUBLIC src)

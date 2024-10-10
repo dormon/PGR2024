@@ -2,6 +2,8 @@
 #include<geGL/geGL.h>
 #include<geGL/StaticCalls.h>
 
+#include<timer.hpp>
+
 using namespace ge::gl;
 
 std::string shaderToStr(GLenum type){
@@ -46,6 +48,11 @@ int main(int argc,char*argv[]){
   #version 430
   #line 37
 
+  uniform float iTime = 0;
+  uniform float cameraYAngle = 0;
+  uniform float cameraXAngle = 0;
+  uniform float cameraDistance = 2;
+
   out vec3 vColor;
 
   mat4 T(float x,float y,float z){
@@ -62,8 +69,7 @@ int main(int argc,char*argv[]){
     return r;
   }
 
-  mat4 Rx(float aa){
-    float a = radians(aa);
+  mat4 Rx(float a){
     mat4 r = mat4(1);
     r[1][1] =  cos(a);
     r[2][2] =  cos(a);
@@ -71,8 +77,7 @@ int main(int argc,char*argv[]){
     r[2][1] = -sin(a);
     return r;
   }
-  mat4 Ry(float aa){
-    float a = radians(aa);
+  mat4 Ry(float a){
     mat4 r = mat4(1);
     r[0][0] =  cos(a);
     r[2][2] =  cos(a);
@@ -102,20 +107,29 @@ int main(int argc,char*argv[]){
     return R;
   }
 
-  void main(){
-    mat4 model = Rz(30);
-    float n = 0.1;
-    float f = 1000;
-    float w = 1024;
-    float h = 768;
-    float fovy = radians(90);
-    float aspectRatio = w/h;
+  mat4 perspective(float fovy,float a,float n,float f){
     float R = n*tan(fovy/2.);
     float L = -R;
-    float T = R/aspectRatio;
+    float T = R/a;
     float B = -T;
-    mat4 proj  = frustum(L,R,B,T,n,f);
-    mat4 mvp = proj * model;
+    return frustum(L,R,B,T,n,f);
+  }
+
+  void main(){
+    mat4 model = mat4(1);
+    float fovy = radians(90);
+    float w = 1024;
+    float h = 768;
+    float aspectRatio = w/h;
+    float n = 0.1;
+    float f = 1000;
+    mat4 proj = perspective(fovy,aspectRatio,n,f);
+  
+    mat4 view = mat4(1);
+
+    view = T(0,0,-cameraDistance)*Rx(cameraXAngle)*Ry(cameraYAngle);
+
+    mat4 mvp = proj * view * model;
     if(gl_VertexID == 0){vColor = vec3(1,0,0);gl_Position = mvp*vec4(0,0,0,1);}
     if(gl_VertexID == 1){vColor = vec3(0,1,0);gl_Position = mvp*vec4(1,0,0,1);}
     if(gl_VertexID == 2){vColor = vec3(0,0,1);gl_Position = mvp*vec4(0,1,0,1);}
@@ -147,12 +161,34 @@ int main(int argc,char*argv[]){
 
   glEnable(GL_DEPTH_TEST);
 
+
+  auto timer = Timer<float>();
+
+  GLuint iTimeLocation          = glGetUniformLocation(prg,"iTime"         );
+  GLuint cameraYAngleLocation   = glGetUniformLocation(prg,"cameraYAngle"  );
+  GLuint cameraXAngleLocation   = glGetUniformLocation(prg,"cameraXAngle"  );
+  GLuint cameraDistanceLocation = glGetUniformLocation(prg,"cameraDistance");
+
+  float cameraYAngle   = 0.f;
+  float cameraXAngle   = 0.f;
+  float cameraDistance = 2.f;
+  float sensitivity    = 0.1f;
+
   bool running = true;
   while(running){
     SDL_Event event;
     while(SDL_PollEvent(&event)){
       if(event.type == SDL_QUIT)
         running = false;
+      if(event.type == SDL_MOUSEMOTION){
+        if(event.motion.state & SDL_BUTTON_MMASK){
+          cameraYAngle += event.motion.xrel * sensitivity;
+          cameraXAngle += event.motion.yrel * sensitivity;
+        }
+        if(event.motion.state & SDL_BUTTON_RMASK){
+          cameraDistance += event.motion.yrel;
+        }
+      }
     }
 
     glClearColor(0,0,1,1);
@@ -160,7 +196,14 @@ int main(int argc,char*argv[]){
 
     glBindVertexArray(vao);
     glUseProgram(prg);
+
+    glProgramUniform1f(prg,iTimeLocation,timer.elapsedFromStart());
+    glProgramUniform1f(prg,cameraYAngleLocation  ,cameraYAngle  );
+    glProgramUniform1f(prg,cameraXAngleLocation  ,cameraXAngle  );
+    glProgramUniform1f(prg,cameraDistanceLocation,cameraDistance);
+
     glDrawArrays(GL_TRIANGLES,0,3);
+
 
     SDL_GL_SwapWindow(window);
   }
