@@ -48,20 +48,62 @@ int main(int argc,char*argv[]){
   }
   ).";
 
+  char const*gsSrc = R".(
+  #version 430
+  
+  layout(triangles)in;
+  layout(line_strip,max_vertices=6)out;
+
+  in vec3 vColor[];
+  out vec3 gColor;
+
+
+  void main(){
+    vec4 center = (gl_in[0].gl_Position + gl_in[1].gl_Position + gl_in[2].gl_Position)/3;
+    vec4 ac = (gl_in[0].gl_Position + gl_in[1].gl_Position)/2.f;
+    vec4 bc = (gl_in[1].gl_Position + gl_in[2].gl_Position)/2.f;
+    vec4 cc = (gl_in[2].gl_Position + gl_in[0].gl_Position)/2.f;
+
+    gColor = vec3(1);
+    gl_Position = center;
+    EmitVertex();
+    gl_Position = ac;
+    EmitVertex();
+    EndPrimitive();
+
+    gColor = vec3(1);
+    gl_Position = center;
+    EmitVertex();
+    gl_Position = bc;
+    EmitVertex();
+    EndPrimitive();
+
+    gColor = vec3(1);
+    gl_Position = center;
+    EmitVertex();
+    gl_Position = cc;
+    EmitVertex();
+    EndPrimitive();
+
+
+  }
+  ).";
+
   char const*fsSrc = R".(
   #version 430
 
-  in vec3 vColor;
+  in vec3 gColor;
 
   out vec4 fColor;
   void main(){
-    fColor = vec4(vColor,1);
+    fColor = vec4(gColor,1);
   }
   ).";
 
   auto vs = std::make_shared<Shader>(GL_VERTEX_SHADER  ,vsSrc);
+  auto gs = std::make_shared<Shader>(GL_GEOMETRY_SHADER,gsSrc);
   auto fs = std::make_shared<Shader>(GL_FRAGMENT_SHADER,fsSrc);
-  auto prg = std::make_shared<Program>(vs,fs);
+  auto prg = std::make_shared<Program>(vs,gs,fs);
 
 
   glEnable(GL_DEPTH_TEST);
