@@ -12,7 +12,7 @@ add_subdirectory(libs/glm-0.9.9.8)
 
 add_custom_target(run ./${PROJECT_NAME})
 
-add_executable(${PROJECT_NAME} src/main.cpp src/timer.hpp)
+add_executable(${PROJECT_NAME} src/main.cpp src/timer.hpp src/bunny.cpp src/bunny.hpp)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2 SDL2::SDL2main geGL::geGL glm)
 

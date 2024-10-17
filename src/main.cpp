@@ -11,6 +11,7 @@
 #include<glm/gtc/matrix_transform.hpp>
 
 #include<timer.hpp>
+#include<bunny.hpp>
 
 using namespace ge::gl;
 
@@ -36,25 +37,21 @@ int main(int argc,char*argv[]){
 
   out vec3 vColor;
 
+  layout(binding=0,std430)buffer Vertices{float vertices[];};
+  layout(binding=1,std430)buffer Indices {uint  indices [];};
+
   void main(){
   
-    uint indices[] = uint[](
-      0u,1u,2u,2u,1u,3u,
-      4u,5u,6u,6u,5u,7u,
-      0u,4u,2u,2u,4u,6u,
-      1u,5u,3u,3u,5u,7u,
-      0u,1u,4u,4u,1u,5u,
-      2u,3u,6u,6u,3u,7u
-    );
 
-    if(gl_VertexID>=indices.length())return;
-
+    uint index = indices[gl_VertexID];
+    
     vec3 pos;
-    for(uint i=0u;i<3u;++i)
-      pos[i] = float((indices[gl_VertexID]>>i)&1u);
+    pos.x = vertices[index*6+0];
+    pos.y = vertices[index*6+1];
+    pos.z = vertices[index*6+2];
 
     mat4 model = mat4(1);
-    gl_Position = proj*view*model*vec4(pos*2.0f-1.f,1.f);
+    gl_Position = proj*view*model*vec4(pos,1.f);
     vColor = vec3(1,0,0);
   }
   ).";
@@ -87,19 +84,20 @@ int main(int argc,char*argv[]){
   float sensitivity    = 0.1f;
   auto cameraPosition = glm::vec3(0.f);
 
+  GLuint ind;
+  glCreateBuffers(1,&ind);
+  glNamedBufferData(ind,sizeof(bunnyIndices),bunnyIndices,GL_DYNAMIC_COPY);
+
+  GLuint ver;
+  glCreateBuffers(1,&ver);
+  glNamedBufferData(ver,sizeof(bunnyVertices),bunnyVertices,GL_DYNAMIC_COPY);
+
+
+
 
   bool running = true;
   while(running){
-    auto CT = glm::translate(glm::mat4(1.f),cameraPosition);
-    auto CRX = glm::rotate(glm::mat4(1.f),cameraXAngle,glm::vec3(1.f,0.f,0.f));
-    auto CRY = glm::rotate(glm::mat4(1.f),cameraYAngle,glm::vec3(0.f,1.f,0.f));
-    auto CR = CRX * CRY;
-
-    auto view = CR * CT;
-
     SDL_Event event;
-
-
     std::map<int,int>keyDown;
     while(SDL_PollEvent(&event)){
       if(event.type == SDL_QUIT)
@@ -128,6 +126,11 @@ int main(int argc,char*argv[]){
       }
     }
 
+    auto CT = glm::translate(glm::mat4(1.f),cameraPosition);
+    auto CRX = glm::rotate(glm::mat4(1.f),cameraXAngle,glm::vec3(1.f,0.f,0.f));
+    auto CRY = glm::rotate(glm::mat4(1.f),cameraYAngle,glm::vec3(0.f,1.f,0.f));
+    auto CR = CRX * CRY;
+    auto view = CR * CT;
     auto CCR = glm::transpose(CR);
     cameraPosition -= glm::vec3(CCR[2])*(float)keyDown[SDLK_s];
     cameraPosition += glm::vec3(CCR[2])*(float)keyDown[SDLK_w];
@@ -144,11 +147,14 @@ int main(int argc,char*argv[]){
 
 
     prg->use();
-    prg->set1f       ("iTime",timer.elapsedFromStart());
+    //prg->set1f       ("iTime",timer.elapsedFromStart());
     prg->setMatrix4fv("proj" ,(float*)&proj);
     prg->setMatrix4fv("view" ,(float*)&view);
 
-    glDrawArrays(GL_TRIANGLES,0,36);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,0,ver);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,1,ind);
+
+    glDrawArrays(GL_TRIANGLES,0,sizeof(bunnyIndices)/sizeof(uint32_t));
 
     SDL_GL_SwapWindow(window);
   }
