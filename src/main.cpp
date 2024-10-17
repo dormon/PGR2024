@@ -2,6 +2,7 @@
 #include "geGL/Shader.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtc/constants.hpp"
+#include "glm/matrix.hpp"
 #include<SDL.h>
 #include<geGL/geGL.h>
 #include<geGL/StaticCalls.h>
@@ -29,9 +30,6 @@ int main(int argc,char*argv[]){
   #line 37
 
   uniform float iTime = 0;
-  uniform float cameraYAngle = 0;
-  uniform float cameraXAngle = 0;
-  uniform float cameraDistance = 2;
 
   uniform mat4 proj = mat4(1);
   uniform mat4 view = mat4(1);
@@ -39,12 +37,25 @@ int main(int argc,char*argv[]){
   out vec3 vColor;
 
   void main(){
-    mat4 model = mat4(1);
   
-    mat4 mvp = proj * view * model;
-    if(gl_VertexID == 0){vColor = vec3(1,0,0);gl_Position = mvp*vec4(0,0,0,1);}
-    if(gl_VertexID == 1){vColor = vec3(0,1,0);gl_Position = mvp*vec4(1,0,0,1);}
-    if(gl_VertexID == 2){vColor = vec3(0,0,1);gl_Position = mvp*vec4(0,1,0,1);}
+    uint indices[] = uint[](
+      0u,1u,2u,2u,1u,3u,
+      4u,5u,6u,6u,5u,7u,
+      0u,4u,2u,2u,4u,6u,
+      1u,5u,3u,3u,5u,7u,
+      0u,1u,4u,4u,1u,5u,
+      2u,3u,6u,6u,3u,7u
+    );
+
+    if(gl_VertexID>=indices.length())return;
+
+    vec3 pos;
+    for(uint i=0u;i<3u;++i)
+      pos[i] = float((indices[gl_VertexID]>>i)&1u);
+
+    mat4 model = mat4(1);
+    gl_Position = proj*view*model*vec4(pos*2.0f-1.f,1.f);
+    vColor = vec3(1,0,0);
   }
   ).";
 
@@ -74,22 +85,39 @@ int main(int argc,char*argv[]){
   float cameraXAngle   = 0.f;
   float cameraDistance = 2.f;
   float sensitivity    = 0.1f;
+  auto cameraPosition = glm::vec3(0.f);
 
 
   bool running = true;
   while(running){
+    auto CT = glm::translate(glm::mat4(1.f),cameraPosition);
+    auto CRX = glm::rotate(glm::mat4(1.f),cameraXAngle,glm::vec3(1.f,0.f,0.f));
+    auto CRY = glm::rotate(glm::mat4(1.f),cameraYAngle,glm::vec3(0.f,1.f,0.f));
+    auto CR = CRX * CRY;
+
+    auto view = CR * CT;
+
     SDL_Event event;
+
+
+    std::map<int,int>keyDown;
     while(SDL_PollEvent(&event)){
       if(event.type == SDL_QUIT)
         running = false;
       if(event.type == SDL_MOUSEMOTION){
-        if(event.motion.state & SDL_BUTTON_MMASK){
+        if(event.motion.state & SDL_BUTTON_RMASK){
           cameraYAngle += event.motion.xrel * sensitivity;
           cameraXAngle += event.motion.yrel * sensitivity;
         }
         if(event.motion.state & SDL_BUTTON_RMASK){
           cameraDistance += event.motion.yrel;
         }
+      }
+      if(event.type == SDL_KEYUP){
+        keyDown[event.key.keysym.sym] = 0;
+      }
+      if(event.type == SDL_KEYDOWN){
+        keyDown[event.key.keysym.sym] = 1;
       }
       if(event.type == SDL_WINDOWEVENT){
         if(event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED){
@@ -100,6 +128,12 @@ int main(int argc,char*argv[]){
       }
     }
 
+    auto CCR = glm::transpose(CR);
+    cameraPosition -= glm::vec3(CCR[2])*(float)keyDown[SDLK_s];
+    cameraPosition += glm::vec3(CCR[2])*(float)keyDown[SDLK_w];
+    cameraPosition += glm::vec3(CCR[0])*(float)keyDown[SDLK_a];
+    cameraPosition -= glm::vec3(CCR[0])*(float)keyDown[SDLK_d];
+
     glClearColor(0,0,1,1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
@@ -108,17 +142,13 @@ int main(int argc,char*argv[]){
     float aspect = (float)width / (float)height;
     auto proj = glm::perspective(glm::half_pi<float>(),aspect,0.1f,1000.f);
 
-    auto CT = glm::translate(glm::mat4(1.f),glm::vec3(0,0,-cameraDistance));
-    auto CRX = glm::rotate(glm::mat4(1.f),cameraXAngle,glm::vec3(1.f,0.f,0.f));
-    auto CRY = glm::rotate(glm::mat4(1.f),cameraYAngle,glm::vec3(0.f,1.f,0.f));
-    auto view = CT * CRX * CRY;
 
     prg->use();
     prg->set1f       ("iTime",timer.elapsedFromStart());
     prg->setMatrix4fv("proj" ,(float*)&proj);
     prg->setMatrix4fv("view" ,(float*)&view);
 
-    glDrawArrays(GL_TRIANGLES,0,3);
+    glDrawArrays(GL_TRIANGLES,0,36);
 
     SDL_GL_SwapWindow(window);
   }
