@@ -37,22 +37,14 @@ int main(int argc,char*argv[]){
 
   out vec3 vColor;
 
-  layout(binding=0,std430)buffer Vertices{float vertices[];};
-  layout(binding=1,std430)buffer Indices {uint  indices [];};
+  layout(location=0)in vec3 position;
+  layout(location=1)in vec3 normal  ;
 
   void main(){
-  
-
-    uint index = indices[gl_VertexID];
-    
-    vec3 pos;
-    pos.x = vertices[index*6+0];
-    pos.y = vertices[index*6+1];
-    pos.z = vertices[index*6+2];
 
     mat4 model = mat4(1);
-    gl_Position = proj*view*model*vec4(pos,1.f);
-    vColor = vec3(1,0,0);
+    gl_Position = proj*view*model*vec4(position,1.f);
+    vColor = normal;
   }
   ).";
 
@@ -71,8 +63,6 @@ int main(int argc,char*argv[]){
   auto fs = std::make_shared<Shader>(GL_FRAGMENT_SHADER,fsSrc);
   auto prg = std::make_shared<Program>(vs,fs);
 
-  GLuint vao;
-  glCreateVertexArrays(1,&vao);
 
   glEnable(GL_DEPTH_TEST);
 
@@ -93,6 +83,20 @@ int main(int argc,char*argv[]){
   glNamedBufferData(ver,sizeof(bunnyVertices),bunnyVertices,GL_DYNAMIC_COPY);
 
 
+  GLuint vao;
+  glCreateVertexArrays(1,&vao);
+
+  glVertexArrayElementBuffer(vao,ind);
+  glVertexArrayAttribBinding(vao,0,0);
+  glEnableVertexArrayAttrib(vao,0);
+  glVertexArrayAttribFormat(vao,0,3,GL_FLOAT,GL_FALSE,0);
+  glVertexArrayVertexBuffer(vao,0,ver,0,sizeof(float)*6);
+
+  glVertexArrayElementBuffer(vao,ind);
+  glVertexArrayAttribBinding(vao,1,1);
+  glEnableVertexArrayAttrib(vao,1);
+  glVertexArrayAttribFormat(vao,1,3,GL_FLOAT,GL_FALSE,0);
+  glVertexArrayVertexBuffer(vao,1,ver,3*sizeof(float),sizeof(float)*6);
 
 
   bool running = true;
@@ -140,7 +144,6 @@ int main(int argc,char*argv[]){
     glClearColor(0,0,1,1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
-    glBindVertexArray(vao);
 
     float aspect = (float)width / (float)height;
     auto proj = glm::perspective(glm::half_pi<float>(),aspect,0.1f,1000.f);
@@ -151,15 +154,12 @@ int main(int argc,char*argv[]){
     prg->setMatrix4fv("proj" ,(float*)&proj);
     prg->setMatrix4fv("view" ,(float*)&view);
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,0,ver);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER,1,ind);
-
-    glDrawArrays(GL_TRIANGLES,0,sizeof(bunnyIndices)/sizeof(uint32_t));
+    glBindVertexArray(vao);
+    glDrawElements(GL_TRIANGLES,sizeof(bunnyIndices)/sizeof(uint32_t),GL_UNSIGNED_INT,nullptr);
 
     SDL_GL_SwapWindow(window);
   }
 
-  SDL_GL_DeleteContext(context);
   SDL_DestroyWindow(window);
   return 0;
 
