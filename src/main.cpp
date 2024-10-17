@@ -1,6 +1,11 @@
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/constants.hpp"
 #include<SDL.h>
 #include<geGL/geGL.h>
 #include<geGL/StaticCalls.h>
+
+#include<glm/glm.hpp>
+#include<glm/gtc/matrix_transform.hpp>
 
 #include<timer.hpp>
 
@@ -37,7 +42,10 @@ GLuint createShader(GLenum type,std::string const&src){
 }
 
 int main(int argc,char*argv[]){
-  auto window = SDL_CreateWindow("PGR2024",0,0,1024,768,SDL_WINDOW_OPENGL);
+  int width  = 1024;
+  int height = 768 ;
+
+  auto window = SDL_CreateWindow("PGR2024",0,0,width,height,SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
   auto context = SDL_GL_CreateContext(window);
 
 
@@ -53,82 +61,14 @@ int main(int argc,char*argv[]){
   uniform float cameraXAngle = 0;
   uniform float cameraDistance = 2;
 
+  uniform mat4 proj = mat4(1);
+  uniform mat4 view = mat4(1);
+
   out vec3 vColor;
-
-  mat4 T(float x,float y,float z){
-    mat4 r = mat4(1);
-    r[3] = vec4(x,y,z,1);
-    return r;
-  }
-
-  mat4 S(float x,float y,float z){
-    mat4 r = mat4(1);
-    r[0][0] = x;
-    r[1][1] = y;
-    r[2][2] = z;
-    return r;
-  }
-
-  mat4 Rx(float a){
-    mat4 r = mat4(1);
-    r[1][1] =  cos(a);
-    r[2][2] =  cos(a);
-    r[1][2] =  sin(a);
-    r[2][1] = -sin(a);
-    return r;
-  }
-  mat4 Ry(float a){
-    mat4 r = mat4(1);
-    r[0][0] =  cos(a);
-    r[2][2] =  cos(a);
-    r[0][2] =  sin(a);
-    r[2][0] = -sin(a);
-    return r;
-  }
-  mat4 Rz(float aa){
-    float a = radians(aa);
-    mat4 r = mat4(1);
-    r[0][0] =  cos(a);
-    r[1][1] =  cos(a);
-    r[0][1] =  sin(a);
-    r[1][0] = -sin(a);
-    return r;
-  }
-
-  mat4 frustum(float l,float r,float b,float t,float n,float f){
-    mat4 R = mat4(1);
-    R[0][0] =    2*n/(r-l);
-    R[2][0] =  (r+l)/(r-l);
-    R[1][1] =    2*n/(t-b);
-    R[2][1] =  (t+b)/(t-b);
-    R[2][2] = -(f+n)/(f-n);
-    R[3][2] = -2*f*n/(f-n);
-    R[2][3] =           -1;
-    return R;
-  }
-
-  mat4 perspective(float fovy,float a,float n,float f){
-    float R = n*tan(fovy/2.);
-    float L = -R;
-    float T = R/a;
-    float B = -T;
-    return frustum(L,R,B,T,n,f);
-  }
 
   void main(){
     mat4 model = mat4(1);
-    float fovy = radians(90);
-    float w = 1024;
-    float h = 768;
-    float aspectRatio = w/h;
-    float n = 0.1;
-    float f = 1000;
-    mat4 proj = perspective(fovy,aspectRatio,n,f);
   
-    mat4 view = mat4(1);
-
-    view = T(0,0,-cameraDistance)*Rx(cameraXAngle)*Ry(cameraYAngle);
-
     mat4 mvp = proj * view * model;
     if(gl_VertexID == 0){vColor = vec3(1,0,0);gl_Position = mvp*vec4(0,0,0,1);}
     if(gl_VertexID == 1){vColor = vec3(0,1,0);gl_Position = mvp*vec4(1,0,0,1);}
@@ -161,18 +101,20 @@ int main(int argc,char*argv[]){
 
   glEnable(GL_DEPTH_TEST);
 
-
   auto timer = Timer<float>();
 
   GLuint iTimeLocation          = glGetUniformLocation(prg,"iTime"         );
   GLuint cameraYAngleLocation   = glGetUniformLocation(prg,"cameraYAngle"  );
   GLuint cameraXAngleLocation   = glGetUniformLocation(prg,"cameraXAngle"  );
   GLuint cameraDistanceLocation = glGetUniformLocation(prg,"cameraDistance");
+  GLuint projLocation           = glGetUniformLocation(prg,"proj"          );
+  GLuint viewLocation           = glGetUniformLocation(prg,"view"          );
 
   float cameraYAngle   = 0.f;
   float cameraXAngle   = 0.f;
   float cameraDistance = 2.f;
   float sensitivity    = 0.1f;
+
 
   bool running = true;
   while(running){
@@ -189,6 +131,13 @@ int main(int argc,char*argv[]){
           cameraDistance += event.motion.yrel;
         }
       }
+      if(event.type == SDL_WINDOWEVENT){
+        if(event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED){
+          width  = event.window.data1;
+          height = event.window.data2;
+          glViewport(0,0,width,height);
+        }
+      }
     }
 
     glClearColor(0,0,1,1);
@@ -201,6 +150,16 @@ int main(int argc,char*argv[]){
     glProgramUniform1f(prg,cameraYAngleLocation  ,cameraYAngle  );
     glProgramUniform1f(prg,cameraXAngleLocation  ,cameraXAngle  );
     glProgramUniform1f(prg,cameraDistanceLocation,cameraDistance);
+
+    float aspect = (float)width / (float)height;
+    auto proj = glm::perspective(glm::half_pi<float>(),aspect,0.1f,1000.f);
+    glProgramUniformMatrix4fv(prg,projLocation,1,GL_FALSE,(float*)&proj);
+
+    auto CT = glm::translate(glm::mat4(1.f),glm::vec3(0,0,-cameraDistance));
+    auto CRX = glm::rotate(glm::mat4(1.f),cameraXAngle,glm::vec3(1.f,0.f,0.f));
+    auto CRY = glm::rotate(glm::mat4(1.f),cameraYAngle,glm::vec3(0.f,1.f,0.f));
+    auto view = CT * CRX * CRY;
+    glProgramUniformMatrix4fv(prg,viewLocation,1,GL_FALSE,(float*)&view);
 
     glDrawArrays(GL_TRIANGLES,0,3);
 
