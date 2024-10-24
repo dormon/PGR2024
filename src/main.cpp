@@ -14,6 +14,9 @@
 #include<bunny.hpp>
 #include<iostream>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include<stb_image.h>
+
 using namespace ge::gl;
 
 int main(int argc,char*argv[]){
@@ -80,6 +83,8 @@ int main(int argc,char*argv[]){
   uniform mat4 proj = mat4(1);
   uniform mat4 view = mat4(1);
 
+  out vec3 ePosition;
+
   void main(){
     eColor = 
       cColor[0] * gl_TessCoord.x + 
@@ -97,6 +102,7 @@ int main(int argc,char*argv[]){
 
     gl_Position.xyz += eColor * f;
 
+    ePosition = gl_Position.xyz;
     gl_Position = proj*view*gl_Position;
 
   }
@@ -148,11 +154,16 @@ int main(int argc,char*argv[]){
   char const*fsSrc = R".(
   #version 430
 
+  layout(binding=0)uniform sampler2D tex;
   in vec3 eColor;
+  in vec3 ePosition;
 
   out vec4 fColor;
   void main(){
+    vec4 texColor = texture(tex,vec2(ePosition.yz));
     fColor = vec4(eColor,1);
+
+    fColor = texColor;
   }
   ).";
 
@@ -162,6 +173,35 @@ int main(int argc,char*argv[]){
   auto gs = std::make_shared<Shader>(GL_GEOMETRY_SHADER       ,gsSrc);
   auto fs = std::make_shared<Shader>(GL_FRAGMENT_SHADER       ,fsSrc);
   auto prg = std::make_shared<Program>(vs,cs,es,fs);
+
+
+  auto prg2 = std::make_shared<Program>(
+      std::make_shared<Shader>(GL_VERTEX_SHADER,R".(
+      #version 430
+
+
+      out vec2 vCoord;
+      void main(){
+        if(gl_VertexID == 0)gl_Position = vec4(0,0,0,1);
+        if(gl_VertexID == 1)gl_Position = vec4(1,0,0,1);
+        if(gl_VertexID == 2)gl_Position = vec4(0,1,0,1);
+        if(gl_VertexID == 3)gl_Position = vec4(1,1,0,1);
+        vCoord = gl_Position.xy;
+      }
+      )."),
+      std::make_shared<Shader>(GL_FRAGMENT_SHADER,R".(
+      #version 430
+  
+      layout(binding=0)uniform sampler2D tex;
+
+      in vec2 vCoord;
+      out vec4 fColor;
+
+      void main(){
+        fColor = texture(tex,vCoord);
+      }
+
+      )."));
 
 
   glEnable(GL_DEPTH_TEST);
@@ -197,6 +237,23 @@ int main(int argc,char*argv[]){
   glEnableVertexArrayAttrib(vao,1);
   glVertexArrayAttribFormat(vao,1,3,GL_FLOAT,GL_FALSE,0);
   glVertexArrayVertexBuffer(vao,1,ver,3*sizeof(float),sizeof(float)*6);
+
+  int x,y,n;
+  unsigned char *data = stbi_load("../resources/brno.jpg", &x, &y, &n, 0);
+  if(data == nullptr)
+    std::cerr << "ERROR: loading image failed" << std::endl;
+
+  std::cerr << "channales: " << n << std::endl;
+
+  GLuint tex;
+  glCreateTextures(GL_TEXTURE_2D,1,&tex);
+  glTextureStorage2D(tex,1,GL_RGB8,x,y);
+
+  glTextureSubImage2D(tex,0,0,0,x,y,GL_RGB,GL_UNSIGNED_BYTE,data);
+  glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+  glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+
+  stbi_image_free(data);
 
 
   std::map<int,int>keyDown;
@@ -257,12 +314,15 @@ int main(int argc,char*argv[]){
 
     glBindVertexArray(vao);
 
-    glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+    glBindTextureUnit(0,tex);
+    //glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
 
     glPatchParameteri(GL_PATCH_VERTICES,3);
     glDrawElements(GL_PATCHES,sizeof(bunnyIndices)/sizeof(uint32_t),GL_UNSIGNED_INT,nullptr);
     if(auto x=glGetError())std::cerr << x << std::endl;
 
+    prg2->use();
+    glDrawArrays(GL_TRIANGLE_STRIP,0,4);
 
     SDL_GL_SwapWindow(window);
   }

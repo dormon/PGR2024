@@ -19,3 +19,4 @@ add_executable(${PROJECT_NAME} src/main.cpp src/timer.hpp src/bunny.cpp src/bunn
 target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2 SDL2::SDL2main geGL::geGL glm)
 
 target_include_directories(${PROJECT_NAME} PUBLIC src)
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/stb_image)
