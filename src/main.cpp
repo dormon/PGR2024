@@ -12,6 +12,7 @@
 
 #include<timer.hpp>
 #include<bunny.hpp>
+#include<iostream>
 
 using namespace ge::gl;
 
@@ -32,8 +33,6 @@ int main(int argc,char*argv[]){
 
   uniform float iTime = 0;
 
-  uniform mat4 proj = mat4(1);
-  uniform mat4 view = mat4(1);
 
   out vec3 vColor;
 
@@ -43,10 +42,67 @@ int main(int argc,char*argv[]){
   void main(){
 
     mat4 model = mat4(1);
-    gl_Position = proj*view*model*vec4(position,1.f);
+    gl_Position = model*vec4(position,1.f);
     vColor = normal;
   }
   ).";
+
+  char const*csSrc = R".(
+  #version 430
+
+  in vec3 vColor[];
+  out vec3 cColor[];
+
+  layout(vertices=3)out;
+
+  void main(){
+    if(gl_InvocationID == 0){
+      gl_TessLevelInner[0] = 10;
+      gl_TessLevelInner[1] = 10;
+      gl_TessLevelOuter[0] = 10;
+      gl_TessLevelOuter[1] = 10;
+      gl_TessLevelOuter[2] = 10;
+      gl_TessLevelOuter[3] = 10;
+    }
+    gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+    cColor[gl_InvocationID] = vColor[gl_InvocationID];
+  }
+  ).";
+
+  char const*esSrc = R".(
+  #version 430
+
+  layout(triangles)in;
+
+  in vec3 cColor[];
+  out vec3 eColor;
+
+  uniform mat4 proj = mat4(1);
+  uniform mat4 view = mat4(1);
+
+  void main(){
+    eColor = 
+      cColor[0] * gl_TessCoord.x + 
+      cColor[1] * gl_TessCoord.y + 
+      cColor[2] * gl_TessCoord.z ;
+
+    
+    float f = (1-length(vec3(0.3)-gl_TessCoord.xyz))*gl_TessCoord.x*gl_TessCoord.y*gl_TessCoord.z;
+   
+
+    gl_Position = 
+      gl_in[0].gl_Position * gl_TessCoord.x + 
+      gl_in[1].gl_Position * gl_TessCoord.y + 
+      gl_in[2].gl_Position * gl_TessCoord.z ;
+
+    gl_Position.xyz += eColor * f;
+
+    gl_Position = proj*view*gl_Position;
+
+  }
+  ).";
+
+
 
   char const*gsSrc = R".(
   #version 430
@@ -92,18 +148,20 @@ int main(int argc,char*argv[]){
   char const*fsSrc = R".(
   #version 430
 
-  in vec3 gColor;
+  in vec3 eColor;
 
   out vec4 fColor;
   void main(){
-    fColor = vec4(gColor,1);
+    fColor = vec4(eColor,1);
   }
   ).";
 
-  auto vs = std::make_shared<Shader>(GL_VERTEX_SHADER  ,vsSrc);
-  auto gs = std::make_shared<Shader>(GL_GEOMETRY_SHADER,gsSrc);
-  auto fs = std::make_shared<Shader>(GL_FRAGMENT_SHADER,fsSrc);
-  auto prg = std::make_shared<Program>(vs,gs,fs);
+  auto vs = std::make_shared<Shader>(GL_VERTEX_SHADER         ,vsSrc);
+  auto cs = std::make_shared<Shader>(GL_TESS_CONTROL_SHADER   ,csSrc);
+  auto es = std::make_shared<Shader>(GL_TESS_EVALUATION_SHADER,esSrc);
+  auto gs = std::make_shared<Shader>(GL_GEOMETRY_SHADER       ,gsSrc);
+  auto fs = std::make_shared<Shader>(GL_FRAGMENT_SHADER       ,fsSrc);
+  auto prg = std::make_shared<Program>(vs,cs,es,fs);
 
 
   glEnable(GL_DEPTH_TEST);
@@ -113,7 +171,7 @@ int main(int argc,char*argv[]){
   float cameraYAngle   = 0.f;
   float cameraXAngle   = 0.f;
   float cameraDistance = 2.f;
-  float sensitivity    = 0.1f;
+  float sensitivity    = 0.01f;
   auto cameraPosition = glm::vec3(0.f);
 
   GLuint ind;
@@ -141,10 +199,10 @@ int main(int argc,char*argv[]){
   glVertexArrayVertexBuffer(vao,1,ver,3*sizeof(float),sizeof(float)*6);
 
 
+  std::map<int,int>keyDown;
   bool running = true;
   while(running){
     SDL_Event event;
-    std::map<int,int>keyDown;
     while(SDL_PollEvent(&event)){
       if(event.type == SDL_QUIT)
         running = false;
@@ -178,10 +236,10 @@ int main(int argc,char*argv[]){
     auto CR = CRX * CRY;
     auto view = CR * CT;
     auto CCR = glm::transpose(CR);
-    cameraPosition -= glm::vec3(CCR[2])*(float)keyDown[SDLK_s];
-    cameraPosition += glm::vec3(CCR[2])*(float)keyDown[SDLK_w];
-    cameraPosition += glm::vec3(CCR[0])*(float)keyDown[SDLK_a];
-    cameraPosition -= glm::vec3(CCR[0])*(float)keyDown[SDLK_d];
+    cameraPosition -= glm::vec3(CCR[2])*(float)keyDown[SDLK_s]*0.01f;
+    cameraPosition += glm::vec3(CCR[2])*(float)keyDown[SDLK_w]*0.01f;
+    cameraPosition += glm::vec3(CCR[0])*(float)keyDown[SDLK_a]*0.01f;
+    cameraPosition -= glm::vec3(CCR[0])*(float)keyDown[SDLK_d]*0.01f;
 
     glClearColor(0,0,1,1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -197,7 +255,13 @@ int main(int argc,char*argv[]){
     prg->setMatrix4fv("view" ,(float*)&view);
 
     glBindVertexArray(vao);
-    glDrawElements(GL_TRIANGLES,sizeof(bunnyIndices)/sizeof(uint32_t),GL_UNSIGNED_INT,nullptr);
+
+    glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+
+    glPatchParameteri(GL_PATCH_VERTICES,3);
+    glDrawElements(GL_PATCHES,sizeof(bunnyIndices)/sizeof(uint32_t),GL_UNSIGNED_INT,nullptr);
+    if(auto x=glGetError())std::cerr << x << std::endl;
+
 
     SDL_GL_SwapWindow(window);
   }

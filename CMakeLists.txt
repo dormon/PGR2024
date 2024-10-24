@@ -4,6 +4,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
 project(pgr2024)
 
+SET(CMAKE_CXX_STANDARD 17)
+
 option(SDL_SHARED "" OFF)
 option(SDL_STATIC "" ON)
 add_subdirectory(libs/SDL-release-2.30.8)
