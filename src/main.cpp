@@ -240,6 +240,7 @@ int main(int argc,char*argv[]){
     cameraPosition += glm::vec3(CCR[2])*(float)keyDown[SDLK_w]*0.01f;
     cameraPosition += glm::vec3(CCR[0])*(float)keyDown[SDLK_a]*0.01f;
     cameraPosition -= glm::vec3(CCR[0])*(float)keyDown[SDLK_d]*0.01f;
+    cameraPosition -= glm::vec3(CCR[1])*(float)keyDown[SDLK_SPACE]*0.01f;
 
     glClearColor(0,0,1,1);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
